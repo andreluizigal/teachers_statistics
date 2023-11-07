@@ -58,8 +58,7 @@ for department in departments:
             query += f"({siape}, '{name}', {department[0]}),"
             # print(f"{siape}, {name}, {department[0]}")
 
-    else:
-        print(f"A requisição falhou. Código: {response.status_code}")
+    else: print(f"A requisição falhou. Código: {response.status_code}")
 
 
 if query != 'INSERT INTO teachers VALUES ':
@@ -69,9 +68,8 @@ if query != 'INSERT INTO teachers VALUES ':
     cursor.close()
     connection.commit()
     connection.close()
-    print('Banco de dados atualizado.')
-
-else: print('O banco de dados está em dia com o SIGAA')
+    print('O banco de dados foi atualizado.')
+else: print('O banco de dados já está em dia com o SIGAA')
 
 
 

@@ -139,8 +139,8 @@ if response.status_code < 400:
             connection.commit()
             connection.close()
 
-            print('Banco de dados atualizado.')
-        else: print('O banco de dados está em dia com o SIGAA')
+            print('O banco de dados foi atualizado.')
+        else: print('O banco de dados já está em dia com o SIGAA')
 
     else: print(f"A requisição falhou. Código: {response.status_code}")
 else: print(f"A requisição falhou. Código: {response.status_code}")

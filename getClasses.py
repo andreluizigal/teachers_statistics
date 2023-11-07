@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import psycopg2
 import re
 from unidecode import unidecode
+import traceback
 
 class TLSAdapter(requests.adapters.HTTPAdapter):
 
@@ -13,43 +14,66 @@ class TLSAdapter(requests.adapters.HTTPAdapter):
         kwargs['ssl_context'] = ctx
         return super(TLSAdapter, self).init_poolmanager(*args, **kwargs)
 
-def verify_mandatory (session, course, matrix, discipline):
+def verify_mandatory (session, discipline):
+    type = 2
+    while True:
+        response = session.get('https://www.si3.ufc.br/sigaa/public/componentes/busca_componentes.jsf')
 
-    response = session.get(f'https://si3.ufc.br/sigaa/public/curso/curriculo.jsf?lc=pt_BR&id={course}')
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+        view_state = soup.find('input', {'id': 'javax.faces.ViewState'})['value']
 
-    view_state = soup.find('input', {'id': 'javax.faces.ViewState'})['value']
+        data = {
+            "form": "form",
+            "form:checkNivel": "on",
+            "form:nivel": "G",
+            "form:checkTipo": "on",
+            "form:tipo": type,
+            "form:checkCodigo": "on",
+            "form:j_id_jsp_541340994_12": discipline,
+            "form:j_id_jsp_541340994_14": '',
+            "form:unidades": 0,
+            "form:j_id_jsp_541340994_19": "Buscar Componentes",
+            "javax.faces.ViewState": view_state
+        }
 
-    sufix = re.split(r'(Presencial - |A Distância - )', matrix)[-1]
+        response = session.post('https://www.si3.ufc.br/sigaa/public/componentes/busca_componentes.jsf', data=data)
 
-    title = soup.find('td', string = sufix)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-    id = title.find_next('a', title='Relatório da Estrutura Curricular').get('onclick').split('id,')[1].split("'")[0]
+        view_state = soup.find('input', {'id': 'javax.faces.ViewState'})['value']
 
-    data = {
-        "j_id_jsp_1195785150_26": "j_id_jsp_1195785150_26",
-        "j_id_jsp_1195785150_26:j_id_jsp_1195785150_37": "j_id_jsp_1195785150_26:j_id_jsp_1195785150_37",
-        "javax.faces.ViewState": view_state,
-        "id": id
-    }
+        try:
+            id = soup.find('a', title="Visualizar Detalhes do Componente Curricular").get('onclick').split('id,')[1].split(",")[0]
+        except: 
+            type = 1
+            continue
 
-    response = session.post('https://www.si3.ufc.br/sigaa/public/curso/curriculo.jsf', data=data)
+        data = {
+            "j_id_jsp_541340994_22": "j_id_jsp_541340994_22",
+            "javax.faces.ViewState": view_state,
+            "j_id_jsp_541340994_22:j_id_jsp_541340994_23": "j_id_jsp_541340994_22:j_id_jsp_541340994_23",
+            "id": id,
+            "publico": "public"
+        }
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+        response = session.post('https://www.si3.ufc.br/sigaa/public/componentes/busca_componentes.jsf', data=data)
 
-    disciplines = soup.find_all('tr', class_='componentes')
-    
-    for d in disciplines:
-        code = d.find('td').text.split(' - ')[0]
-        if code == discipline:
-            mandatory = d.find('i').text
-            if mandatory == "Obrigatória": return True
-            else: return False
-    return False
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-ended = False
+        matrices = soup.find_all('tr', {'class': ['linhaPar', 'linhaImpar']})
+
+        for m in matrices:
+            active = m.find('td', class_='colAtivo').get_text()
+            if active == 'Sim':
+                mandatory = m.find('td', class_='colObg').get_text()
+                if mandatory == 'Sim': return True
+        return False
+
+
 def main():
+
+    # Banco de dados
     dbname = "departments"
     user = "postgres"
     password = "1234"
@@ -64,6 +88,28 @@ def main():
 
     except Exception as e:
         print(f"Erro ao conectar ao banco de dados: {e}")
+
+    
+    # Controle de semestres
+    semesters = [(2019, 1), (2019, 2), (2020, 1), (2020, 2), (2021, 1), (2021, 2), (2022, 1), (2022, 2), (2023, 1), (2023, 2)]
+    
+
+    # Controle graduação
+    levels = ['G', 'S']
+
+    cursor = connection.cursor()
+    cursor.execute("select siape, name from teachers where siape not in (select teacher_siape from teachers_classes) order by name")
+    teachers = cursor.fetchall()
+
+    cursor.execute("select id from classes")
+    classes = cursor.fetchall()
+    classes_ids = []
+    for c in classes:
+        classes_ids.append(c[0])
+
+    cursor.execute("select teacher_siape, class_id from teachers_classes")
+    teacher_classes = cursor.fetchall()
+
 
 
     session = requests.session()
@@ -118,24 +164,11 @@ def main():
             soup = BeautifulSoup(response.text, 'html.parser')
             view_state = soup.find('input', {'id': 'javax.faces.ViewState'})['value']
 
-            cursor = connection.cursor()
-            cursor.execute("select name, siape from teachers where siape not in (select teacher_siape from teachers_classes) order by name")
-            teachers = cursor.fetchall()
-
-            cursor.execute("select id from classes")
-            classes = cursor.fetchall()
-            classes_ids = []
-            for c in classes:
-                classes_ids.append(c[0])
-
-            # Controle de semestres
-            semesters = [(2019, 1), (2019, 2), (2020, 1), (2020, 2), (2021, 1), (2021, 2), (2022, 1), (2022, 2), (2023, 1), (2023, 2)]
-
-            # Controle graduação
-            levels = ['G', '0']
-
+            
+            mandatories = []
+            optionals = []
             for t in teachers:
-                print('\n######################################\nEntrando em:', t[0])
+                print('\n######################################\nEntrando em:', t[1])
 
                 query1 = 'INSERT INTO classes VALUES '
                 query2 = 'INSERT INTO teachers_classes VALUES '
@@ -143,60 +176,36 @@ def main():
 
                 for s in semesters:
                     print(f'\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nSemestre: {s}')
-                    teacher_classes_ids = []
+                    classes_mandatory = []
                     for l in levels:
                         print(f'\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\nGraduação: {l}')
-                        if l == 'G':
-                            data = {
-                                "form": "form",
-                                "form:checkNivel": "on",
-                                "form:selectNivelTurma": l,
-                                "form:checkAnoPeriodo": "on",
-                                "form:inputAno": s[0],
-                                "form:inputPeriodo": s[1],
-                                "form:selectUnidade": 662,
-                                "form:inputCodDisciplina": "",
-                                "form:inputCodTurma": "",
-                                "form:inputLocal": "",
-                                "form:inputHorario": "",
-                                "form:inputNomeDisciplina": "",
-                                "form:checkDocente": "on",
-                                "form:inputNomeDocente": t[0],
-                                "form:selectCurso": 0,
-                                "form:selectPolo": 0,
-                                "form:selectSituacaoTurma": -1,
-                                "form:selectTipoTurma": 0,
-                                "form:selectModalidadeComponente": 0,
-                                "form:selectOpcaoOrdenacao": 1,
-                                "turmasEAD": "false",
-                                "form:buttonBuscar": "Buscar",
-                                "javax.faces.ViewState": view_state
-                            }
-                        else:
-                            data = {
-                                "form": "form",
-                                "form:selectNivelTurma": l,
-                                "form:checkAnoPeriodo": "on",
-                                "form:inputAno": s[0],
-                                "form:inputPeriodo": s[1],
-                                "form:selectUnidade": 662,
-                                "form:inputCodDisciplina": "",
-                                "form:inputCodTurma": "",
-                                "form:inputLocal": "",
-                                "form:inputHorario": "",
-                                "form:inputNomeDisciplina": "",
-                                "form:checkDocente": "on",
-                                "form:inputNomeDocente": t[0],
-                                "form:selectCurso": 0,
-                                "form:selectPolo": 0,
-                                "form:selectSituacaoTurma": -1,
-                                "form:selectTipoTurma": 0,
-                                "form:selectModalidadeComponente": 0,
-                                "form:selectOpcaoOrdenacao": 1,
-                                "turmasEAD": "false",
-                                "form:buttonBuscar": "Buscar",
-                                "javax.faces.ViewState": view_state
-                            }
+                       
+                        data = {
+                            "form": "form",
+                            "form:checkNivel": "on",
+                            "form:selectNivelTurma": l,
+                            "form:checkAnoPeriodo": "on",
+                            "form:inputAno": s[0],
+                            "form:inputPeriodo": s[1],
+                            "form:selectUnidade": 662,
+                            "form:inputCodDisciplina": "",
+                            "form:inputCodTurma": "",
+                            "form:inputLocal": "",
+                            "form:inputHorario": "",
+                            "form:inputNomeDisciplina": "",
+                            "form:checkDocente": "on",
+                            "form:inputNomeDocente": t[1],
+                            "form:selectCurso": 0,
+                            "form:selectPolo": 0,
+                            "form:selectSituacaoTurma": -1,
+                            "form:selectTipoTurma": 0,
+                            "form:selectModalidadeComponente": 0,
+                            "form:selectOpcaoOrdenacao": 1,
+                            "turmasEAD": "false",
+                            "form:buttonBuscar": "Buscar",
+                            "javax.faces.ViewState": view_state
+                        }
+                        
 
                         cookies = response.cookies
                         response = session.post("https://si3.ufc.br/sigaa/ensino/turma/busca_turma.jsf", data=data, cookies=cookies)
@@ -215,7 +224,7 @@ def main():
                             if response.status_code < 400:
                                 soup = BeautifulSoup(response.text, 'html.parser')
                                 
-                                # Verificação se é o nome exato
+                                
                                 teachers_table = soup.find('table', style='listagem')
                                 teachers_table = teachers_table.find_all('tr')
                                 
@@ -225,8 +234,9 @@ def main():
                                 for t1 in teachers_table:
                                     teachers_names.append(unidecode(t1.get_text().split(' (')[0].split('\t')[-1]))
                                     teachers_workload.append(t1.get_text().split(' (')[1].split('h)')[0])
-                                
-                                if t[0] not in teachers_names:
+
+                                # Verificação se é o nome exato
+                                if t[1] not in teachers_names:
                                     continue
                                 #
 
@@ -285,29 +295,29 @@ def main():
                                     
                                     mandatory = 'F'
                                     if l == 'G':
-                                        for m in matrices:
-                                            cursor.execute(f"select course_id from matrices where name = '{m}'")
-                                            course = cursor.fetchone()
-
-                                            if verify_mandatory(session, course[0], m, discipline_code):
+                                        if discipline_code in mandatories: mandatory = 'T'
+                                        elif discipline_code in optionals: mandatory = 'F'
+                                        elif verify_mandatory(session, discipline_code):
                                                 mandatory = 'T'
-                                                break
+                                                mandatories.append(discipline_code)
+                                        else: optionals.append(discipline_code)
+                                    else: mandatory = 'T'
 
 
                                     query1 += f"({class_id}, '{discipline_code}', '{discipline_name}', '{l}', '{mandatory}', {workload}, '{modality}', '{class_number}', '{semester}', '{place}', '{schedule}', {capacity}, {enrolled}),"
 
                                     classes_ids.append(class_id)
 
-                                    print(f'professor: {t[0]} // semestre: {semester} // código: {discipline_code} // nome: {discipline_name} // graduação: {l} // obrigatória: {mandatory} //turma: {class_number} // carga: {workload} // local: {place} // horário: {schedule} // modalidade: {modality} // capacidade: {capacity} // matriculados: {enrolled} // curso:')
+                                    print(f'professor: {t[1]} // semestre: {semester} // código: {discipline_code} // nome: {discipline_name} // graduação: {l} // obrigatória: {mandatory} //turma: {class_number} // carga: {workload} // local: {place} // horário: {schedule} // modalidade: {modality} // capacidade: {capacity} // matriculados: {enrolled} // curso:')
 
 
                                 else:
                                     print("Turma já cadastrada")
 
-                                if class_id not in teacher_classes_ids:
-                                    teacher_workload = teachers_workload[teachers_names.index(t[0])]
-                                    query2 += f"({t[1]}, {class_id}, {teacher_workload}),"
-                                    teacher_classes_ids.append(class_id)
+                                if (t[0],class_id) not in teacher_classes:
+                                    teacher_workload = teachers_workload[teachers_names.index(t[1])]
+                                    query2 += f"({t[0]}, {class_id}, {teacher_workload}),"
+                                    teacher_classes.append((t[0],class_id))
 
                             else: print(f"Não foi possivel acessar a turma: {class_id}")
 
@@ -325,11 +335,8 @@ def main():
                     connection.commit()
                     
 
-                    print('Banco de dados atualizado.')
-            else: print('O banco de dados está em dia com o SIGAA')
-
-
-
+                    print('O banco de dados foi atualizado.')
+                else: print('O banco de dados já está em dia com o SIGAA')
 
         else: print(f"A requisição falhou. Código: {response.status_code}")
     else: print(f"A requisição falhou. Código: {response.status_code}")
@@ -338,8 +345,8 @@ def main():
     connection.close()
     global ended
     ended = True
-    print()
 
+ended = False
 tryes = 0
 while not ended:
     tryes +=1
@@ -348,3 +355,6 @@ while not ended:
         main()
     except Exception as e:
         print(f"Erro ocorreu na tentativa {tryes}: {e}")
+        traceback.print_exc()
+        
+print(f'Execução encerrada após {tryes} tentativas.')

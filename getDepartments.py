@@ -68,7 +68,7 @@ if response.status_code < 400:
             name = department.a.get_text(strip=True)
 
             # Controle de departamentos utilizados
-            if int(id) in [724, 725, 726, 728, 729]:
+            if int(id) in [724, 725, 726, 728, 729, 730, 731, 732]:
                 query += f"({id},'{name}'),"
         
         if query != "INSERT INTO departments (id, name) VALUES ":
@@ -80,16 +80,11 @@ if response.status_code < 400:
             connection.commit()
             connection.close()
 
-            print('Banco de dados atualizado.')
-        
-        else: print('O banco de dados está em dia com o SIGAA')
+            print('O banco de dados foi atualizado.')
+        else: print('O banco de dados já está em dia com o SIGAA')
      
-    else:
-        print(f"A requisição falhou. Código: {response.status_code}")
-
-
-else:
-    print(f"A requisição falhou. Código: {response.status_code}")
+    else: print(f"A requisição falhou. Código: {response.status_code}")
+else: print(f"A requisição falhou. Código: {response.status_code}")
 
 
 
