@@ -1,18 +1,11 @@
+from config import dbname, user, password, host, sigaa_user, sigaa_password
+from modules import TLSAdapter
 import requests
-import ssl
 from bs4 import BeautifulSoup
 import psycopg2
 import re
 from unidecode import unidecode
 import traceback
-
-class TLSAdapter(requests.adapters.HTTPAdapter):
-
-    def init_poolmanager(self, *args, **kwargs):
-        ctx = ssl.create_default_context()
-        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
-        kwargs['ssl_context'] = ctx
-        return super(TLSAdapter, self).init_poolmanager(*args, **kwargs)
 
 def verify_mandatory (session, discipline):
     type = 2
@@ -46,8 +39,8 @@ def verify_mandatory (session, discipline):
         try:
             id = soup.find('a', title="Visualizar Detalhes do Componente Curricular").get('onclick').split('id,')[1].split(",")[0]
         except: 
-            type = 1
-            continue
+            print("ATIVIDADE")
+            return 'Activity'
 
         data = {
             "j_id_jsp_541340994_22": "j_id_jsp_541340994_22",
@@ -70,19 +63,10 @@ def verify_mandatory (session, discipline):
                 if mandatory == 'Sim': return True
         return False
 
-
 def main():
-
-    # Banco de dados
-    dbname = "departments"
-    user = "postgres"
-    password = "1234"
-    host = "localhost"  
-    port = "5432" 
-
     try:
         connection = psycopg2.connect(
-            dbname=dbname, user=user, password=password, host=host, port=port
+            dbname=dbname, user=user, password=password, host=host
         )
         print("Conexão bem-sucedida ao banco de dados PostgreSQL!")
 
@@ -123,8 +107,8 @@ def main():
         cookies = response.cookies
 
         login_data = {
-        "user.login": "andref190",
-        "user.senha": "Dedekitas!23"
+        "user.login": sigaa_user,
+        "user.senha": sigaa_password
         }
 
         headers = {
@@ -176,10 +160,13 @@ def main():
 
                 for s in semesters:
                     print(f'\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nSemestre: {s}')
-                    classes_mandatory = []
                     for l in levels:
                         print(f'\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\nGraduação: {l}')
-                       
+
+                        s_concat = f'{s[0]}' + '.' + f'{s[1]}'
+                        cursor.execute(f"select distinct c.discipline_code from classes c join teachers_classes tc on c.id = tc.class_id where tc.teacher_siape = {t[0]} and c.semester = '{s_concat}' and c.modality = 'A Distância'")
+                        remote_disciplines = cursor.fetchall()
+
                         data = {
                             "form": "form",
                             "form:checkNivel": "on",
@@ -242,19 +229,17 @@ def main():
 
                                 print('----------------------------------------------')
 
+                                modality = soup.find('th', string='Modalidade de Ensino da Disciplina:').find_next('td').text
+
+                                discipline = soup.find('th', string='Componente e Turma:').find_next('td').text.split('Turma ')
+
+                                class_number = discipline[-1]
+                                discipline_code = discipline[0].split(' - ')[0]
+                                discipline_name = discipline[0].split(' - ', 1)[1][:-3]
+
                                 if class_id not in classes_ids:
 
                                     semester = soup.find('th', string=' Ano/Período: ').find_next('td').text
-
-                                    discipline = soup.find('th', string='Componente e Turma:').find_next('td').text.split('Turma ')
-
-                                    class_number = discipline[-1]
-                                    
-                                    discipline_code = discipline[0].split(' - ')[0]
-
-                                    discipline_name = discipline[0].split(' - ', 1)[1][:-3]
-
-                                    modality = soup.find('th', string='Modalidade de Ensino da Disciplina:').find_next('td').text
 
                                     workload = soup.find('th', string='Créditos / Carga Horária:').find_next('td').text.split(' / ')[1].split(' horas')[0]
 
@@ -267,8 +252,6 @@ def main():
                                     except:
                                         place = ""
                                         schedule = ""
-                                    
-                                    
 
                                     try:
                                         enrolled = soup.find('th', string='Totais:').find_next('td').text
@@ -297,10 +280,14 @@ def main():
                                     if l == 'G':
                                         if discipline_code in mandatories: mandatory = 'T'
                                         elif discipline_code in optionals: mandatory = 'F'
-                                        elif verify_mandatory(session, discipline_code):
-                                                mandatory = 'T'
-                                                mandatories.append(discipline_code)
-                                        else: optionals.append(discipline_code)
+                                        else:
+                                            verify = verify_mandatory(session, discipline_code)
+                                            if verify == 'Activity':
+                                                continue
+                                            elif verify:
+                                                    mandatory = 'T'
+                                                    mandatories.append(discipline_code)
+                                            else: optionals.append(discipline_code)
                                     else: mandatory = 'T'
 
 
@@ -316,6 +303,17 @@ def main():
 
                                 if (t[0],class_id) not in teacher_classes:
                                     teacher_workload = teachers_workload[teachers_names.index(t[1])]
+
+                                    if modality == 'A Distância':
+                                        if (discipline_code,) in remote_disciplines:
+                                            teacher_workload = 0
+                                            print("Remota já cadastrada")
+                                            print(remote_disciplines)
+                                        else: 
+                                            remote_disciplines.append((discipline_code,))
+                                            print("Remota primeira vez")
+                                            print(remote_disciplines)
+
                                     query2 += f"({t[0]}, {class_id}, {teacher_workload}),"
                                     teacher_classes.append((t[0],class_id))
 

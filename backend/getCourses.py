@@ -1,26 +1,13 @@
+from config import dbname, user, password, host
 import requests
-import ssl
+from modules import TLSAdapter
 from bs4 import BeautifulSoup
 import psycopg2
 import re
 
-class TLSAdapter(requests.adapters.HTTPAdapter):
-
-    def init_poolmanager(self, *args, **kwargs):
-        ctx = ssl.create_default_context()
-        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
-        kwargs['ssl_context'] = ctx
-        return super(TLSAdapter, self).init_poolmanager(*args, **kwargs)
-    
-dbname = "departments"
-user = "postgres"
-password = "1234"
-host = "localhost"  
-port = "5432" 
-
 try:
     connection = psycopg2.connect(
-        dbname=dbname, user=user, password=password, host=host, port=port
+        dbname=dbname, user=user, password=password, host=host
     )
     print("Conexão bem-sucedida ao banco de dados PostgreSQL!")
 
