@@ -1,3 +1,4 @@
-*.sql
+Dockerfile
+SQL.sql
 __pycache__
 .gitignore

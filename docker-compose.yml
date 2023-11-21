@@ -3,23 +3,28 @@ services:
   frontend:
     container_name: grafana_container
     build: ./backend
+    #image: andreluizigal/grafana_teachers_statistics:TCC
     restart: always
     ports:
-      - "3000:3000"
+      - "80:3000"
     stdin_open: true
     tty: true
 
   db:
     container_name: postgres_container
-    image: andreluizigal/postgres_teachers_statistics:TCC
+    # image: andreluizigal/postgres_teachers_statistics:TCC
+    image: postgres
     restart: always
     environment:
+      POSTGRES_DB: "departments"
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "12345"
     ports:
       - "5000:5432"
     volumes:
       - data:/var/lib/postgresql/data
+      - ./backup:/docker-entrypoint-initdb.d
 
 volumes:
   data:
+  backup:
