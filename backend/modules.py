@@ -1,6 +1,5 @@
 import ssl
 import requests
-import getpass
 
 class TLSAdapter(requests.adapters.HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
@@ -9,14 +8,11 @@ class TLSAdapter(requests.adapters.HTTPAdapter):
         kwargs['ssl_context'] = ctx
         return super(TLSAdapter, self).init_poolmanager(*args, **kwargs)
     
-def login_sigaa (session):
-    url = 'https://si3.ufc.br/sigaa/logar.do?dispatch=logOn'
-    response = session.get(url)
-    while True:
+def login_sigaa (session, user, password, role):
+    try:
+        url = 'https://si3.ufc.br/sigaa/logar.do?dispatch=logOn'
+        response = session.get(url)
         cookies = response.cookies
-
-        user = input('Digite seu usuário do SIGAA: ')
-        password = getpass.getpass('Digite sua senha do SIGAA: ')
 
         login_data = {
         "user.login": user,
@@ -49,10 +45,21 @@ def login_sigaa (session):
 
         if 'Usuário e/ou senha inválidos' in response.text: 
             print('Login inválido')
-            continue
-        try: response = session.get("https://si3.ufc.br/sigaa/escolhaVinculo.do?dispatch=escolher&vinculo=1")
-        except: print('Apenas 1 vínculo')
+            return False
+            
+        if 'possui mais de um' in response.text:
+            response = session.get("https://si3.ufc.br/sigaa/escolhaVinculo.do?dispatch=escolher&vinculo=1")
 
         response = session.get("https://si3.ufc.br/sigaa/paginaInicial.do")
-        response = session.get("https://si3.ufc.br/sigaa/verPortalDiscente.do")
-        return
+
+        if role == '1':
+            response = session.get("https://si3.ufc.br/sigaa/verPortalDiscente.do")
+        elif role == '2':
+            response = session.get("https://si3.ufc.br/sigaa/verPortalDocente.do")
+        else:
+            print('Inválido')
+            return False
+        return True
+    except: 
+        print('Falha na autenticação')
+        return False

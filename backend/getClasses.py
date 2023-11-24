@@ -7,6 +7,8 @@ import re
 from unidecode import unidecode
 import traceback
 from datetime import datetime
+import getpass
+
 
 def verify_mandatory (session, discipline):
     type = 2
@@ -86,10 +88,10 @@ def main():
         else: semesters.append((datetime.now().year - i, 2))
         semesters.append((datetime.now().year - i, 1))
     
-    # semesters = [(2019, 1), (2019, 2), (2020, 1), (2020, 2), (2021, 1), (2021, 2), (2022, 1), (2022, 2), (2023, 1), (2023, 2)]
+    # semesters = [(2021, 2)]
     
 
-    # Controle graduação
+    # Controle nível de graduação
     levels = ['G', 'S']
 
     cursor = connection.cursor()
@@ -105,10 +107,22 @@ def main():
     cursor.execute("select teacher_siape, class_id from teachers_classes")
     teacher_classes = cursor.fetchall()
 
+    
+
     session = requests.session()
     session.mount('https://', TLSAdapter())
 
-    login_sigaa(session)
+    global login_user
+    global login_password
+    global login_role
+    
+    while True:
+        if not login_user or not login_password or not login_role:
+            login_user = input('Digite seu usuário do SIGAA: ')
+            login_password = getpass.getpass('Digite sua senha do SIGAA: ')
+            login_role = input('Tipos de vínculo:\n1 - Discente\n2 - Docente\nDigite o número: ')
+            if login_role not in ['1', '2']: continue
+        if login_sigaa(session, login_user, login_password, login_role): break
 
     response = session.get("https://si3.ufc.br/sigaa/ensino/turma/busca_turma.jsf")
     
@@ -203,6 +217,20 @@ def main():
 
                     if class_id not in classes_ids:
 
+                        mandatory = 'F'
+                        if l == 'G':
+                            if discipline_code in mandatories: mandatory = 'T'
+                            elif discipline_code in optionals: mandatory = 'F'
+                            else:
+                                verify = verify_mandatory(session, discipline_code)
+                                if verify == 'Activity':
+                                    continue
+                                elif verify:
+                                        mandatory = 'T'
+                                        mandatories.append(discipline_code)
+                                else: optionals.append(discipline_code)
+                        else: mandatory = 'T'
+
                         semester = soup.find('th', string=' Ano/Período: ').find_next('td').text
 
                         workload = soup.find('th', string='Créditos / Carga Horária:').find_next('td').text.split(' / ')[1].split(' horas')[0]
@@ -227,11 +255,9 @@ def main():
                         try:
                             capacity = soup.find('th', string='Capacidade:').find_next('td').text.split(' a')[0]
                         except: capacity = enrolled
-
-                        matrices = []
-
-                        next_matrices = soup.find('caption', string='Vagas Reservadas').find_next('tr')
                         
+                        matrices = []
+                        next_matrices = soup.find('caption', string='Vagas Reservadas').find_next('tr')
                         while next_matrices:
                             matrix = next_matrices.find('td').text.rsplit(' - ', 1)[0]
                             
@@ -239,20 +265,6 @@ def main():
                                 matrices.append(matrix)
                                 query3 += f"('{matrix}', {class_id}),"
                             next_matrices = next_matrices.find_next('tr')
-                        
-                        mandatory = 'F'
-                        if l == 'G':
-                            if discipline_code in mandatories: mandatory = 'T'
-                            elif discipline_code in optionals: mandatory = 'F'
-                            else:
-                                verify = verify_mandatory(session, discipline_code)
-                                if verify == 'Activity':
-                                    continue
-                                elif verify:
-                                        mandatory = 'T'
-                                        mandatories.append(discipline_code)
-                                else: optionals.append(discipline_code)
-                        else: mandatory = 'T'
 
 
                         query1 += f"({class_id}, '{discipline_code}', '{discipline_name}', '{l}', '{mandatory}', {workload}, '{modality}', '{class_number}', '{semester}', '{place}', '{schedule}', {capacity}, {enrolled}),"
@@ -304,6 +316,11 @@ def main():
 
 ended = False
 tryes = 0
+
+login_user = ''
+login_password = ''
+login_role = ''
+
 while not ended:
     tryes +=1
     print(f"Tentativa nº {tryes}")

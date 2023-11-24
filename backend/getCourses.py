@@ -3,6 +3,7 @@ import requests
 from modules import TLSAdapter, login_sigaa
 from bs4 import BeautifulSoup
 import psycopg2
+import getpass
 
 try:
     connection = psycopg2.connect(
@@ -34,7 +35,12 @@ query2 = 'INSERT INTO matrices VALUES '
 session = requests.session()
 session.mount('https://', TLSAdapter())
 
-login_sigaa(session)
+while True:
+    login_user = input('Digite seu usuário do SIGAA: ')
+    login_password = getpass.getpass('Digite sua senha do SIGAA: ')
+    login_role = input('Tipos de vínculo:\n1 - Discente\n2 - Docente\nDigite o número: ')
+    if login_role not in ['1', '2']: continue
+    if login_sigaa(session, login_user, login_password, login_role): break
 
 response = session.get("https://si3.ufc.br/sigaa/graduacao/matriz_curricular/lista.jsf")
 

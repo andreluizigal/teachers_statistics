@@ -6,13 +6,12 @@ services:
     #image: andreluizigal/grafana_teachers_statistics:TCC
     restart: always
     ports:
-      - "80:3000"
+      - "3000:3000"
     stdin_open: true
     tty: true
 
   db:
     container_name: postgres_container
-    # image: andreluizigal/postgres_teachers_statistics:TCC
     image: postgres
     restart: always
     environment:
