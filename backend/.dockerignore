@@ -2,3 +2,4 @@ Dockerfile
 SQL.sql
 __pycache__
 .gitignore
+README.md
