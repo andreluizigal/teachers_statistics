@@ -1,4 +1,4 @@
-# Projeto de Otimização da Análise de Dados Acadêmicos - UFC
+# DESENVOLVIMENTO DE FERRAMENTA PARA ANÁLISE ESTATÍSTICA NA GESTÃO ACADÊMICA UNIVERSITÁRIA
 
 ## Descrição do Projeto
 
@@ -7,6 +7,8 @@ Este projeto visa desenvolver uma aplicação para otimizar a análise de dados 
 ## Conteúdo do Repositório
 
 - **backend**: Contém os scripts desenvolvidos para realizar o Web Scraping no portal SIGAA.
+
+- **consultas_sql_perguntas**: Contém as consultas SQL desenvolvidas utilizadas nos painéis do Grafana.
   
 - **docker-compose.yml**: Arquivo de configuração dos containers.
 
