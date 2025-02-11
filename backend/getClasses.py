@@ -80,7 +80,7 @@ def main():
     
     # Controle de semestres
     semesters = []
-    for i in range(2):
+    for i in range(5):
         if len(semesters) >= 10: break
         if i == 0:
             if datetime.now().month >= 6:
