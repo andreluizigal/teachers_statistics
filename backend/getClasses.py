@@ -80,7 +80,7 @@ def main():
     
     # Controle de semestres
     semesters = []
-    for i in range(5):
+    for i in range(2):
         if len(semesters) >= 10: break
         if i == 0:
             if datetime.now().month >= 6:
@@ -181,7 +181,7 @@ def main():
                 soup = BeautifulSoup(response.text, 'html.parser')
                 view_state = soup.find('input', {'id': 'javax.faces.ViewState'})['value']
 
-                classes = soup.findAll('a', title='Ver Detalhes dessa turma')
+                classes = soup.find_all('a', title='Ver Detalhes dessa turma')
                 print("Numero de turmas: ", len(classes))
                 for c in classes:
                     class_id = int(c.get('onclick').split('(')[1].split(')')[0])
